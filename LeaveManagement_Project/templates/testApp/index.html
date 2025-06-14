@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leave Management</title>
+</head>
+<body>
+    
+    <div class="contanier">
+
+        <h1>Employess</h1>
+        <form id="employee-form">
+            {% csrf_token %}
+            <input type="text" id="employee-name" placeholder="employee Name" required />
+            <button type="submit">Add Employee</button>
+        </form>
+
+        <ul id="employee-list"></ul>
+
+        <h2>Leave Request</h2>
+        <form id="leave-form">
+            <select id="leave-employee"></select>
+            <input type="date" id="leave-date" required />
+            <button type="submit">Request Leave</button>
+        </form>
+        <ul id="leave-list"></ul>
+
+        <button type="button" id="cancel-edit-btn" style="display: none;">Cancel Edit</button>
+    </div>
+
+    <script>
+        const API_BASE= '/api'
+        let editingLeaveId = null;
+
+        // csrfToken for post or put
+        function getCSRFToken() {
+            const cookie= document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
+             return cookie ? decodeURIComponent(cookie.split('=')[1]) : '';
+        }
+
+        // Employees
+        async function loadEmployees() {
+            const res= await fetch(`${API_BASE}/employees/`);
+            const data = await res.json();
+            const list = document.getElementById('employee-list');
+            const dropdown = document.getElementById('leave-employee');
+            list.innerHTML = '';
+            dropdown.innerHTML = '';
+
+            data.forEach(emp => {
+                const li = document.createElement('li');
+                li.textContent = emp.name;
+                const delBtn = document.createElement('button');
+                delBtn.textContent = 'Delete';
+                delBtn.onclick = () => deleteEmployee(emp.id);
+                li.appendChild(delBtn);
+                list.appendChild(li);
+
+                const opt = document.createElement('option');
+                opt.value = emp.id;
+                opt.textContent = emp.name;
+                dropdown.appendChild(opt);
+            });
+        }
+
+        async function addEmployee(e) {
+            e.preventDefault();
+            const name = document.getElementById('employee-name').value;
+            const res = await fetch(`${API_BASE}/employees/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken(),
+                },
+                body: JSON.stringify({ name })
+            });
+
+            if (res.ok) {
+                document.getElementById('employee-name').value = '';
+                loadEmployees();
+            } else {
+                alert('Error adding employee');
+            }
+        }
+
+        async function deleteEmployee(id) {
+            const res = await fetch(`${API_BASE}/employees/${id}/`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': getCSRFToken() }
+            });
+            loadEmployees();
+        }
+
+        // Leaves
+        async function loadLeaves() {
+            const res = await fetch(`${API_BASE}/leaves/`);
+            const data = await res.json();
+            const list = document.getElementById('leave-list');
+            list.innerHTML = '';
+
+            data.forEach(leave => {
+                const li = document.createElement('li');
+                li.textContent = `Emp ID: ${leave.employee} - ${leave.employee_name}, Date: ${leave.date}`;
+                const delBtn = document.createElement('button');
+                delBtn.textContent = 'Delete';
+                delBtn.onclick = () => deleteLeave(leave.id);
+                li.appendChild(delBtn);
+                const editBtn = document.createElement('button');
+                editBtn.textContent = 'Edit';
+                editBtn.onclick = () => startEditLeave(leave);
+                li.appendChild(editBtn);
+
+                list.appendChild(li);
+            });
+        }
+
+        async function addLeave(e) {
+            e.preventDefault();
+            const employee = document.getElementById('leave-employee').value;
+            const date = document.getElementById('leave-date').value;
+
+            const method = editingLeaveId ? 'PUT' : 'POST';
+            const url = editingLeaveId ? `${API_BASE}/leaves/${editingLeaveId}/` : `${API_BASE}/leaves/`;
+
+            const res = await fetch(url, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCSRFToken(),
+                },
+                body: JSON.stringify({ employee, date })
+            });
+
+            const result = await res.json();
+            if (res.ok) {
+                document.getElementById('leave-date').value = '';
+                document.getElementById('cancel-edit-btn').style.display = 'none';
+                document.querySelector('#leave-form button[type="submit"]').textContent = 'Request Leave';
+                editingLeaveId = null; // 
+                loadLeaves();
+            } else {
+                alert(result?.detail || result?.error || JSON.stringify(result));
+            }
+        }
+
+        async function deleteLeave(id) {
+            await fetch(`${API_BASE}/leaves/${id}/`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': getCSRFToken() }
+            });
+            loadLeaves();
+        }
+
+        async function startEditLeave(leave) {
+            editingLeaveId = leave.id;
+            document.getElementById('leave-employee').value = leave.employee;
+            document.getElementById('leave-date').value = leave.date;
+            document.querySelector('#leave-form button[type="submit"]').textContent = 'Update Leave';
+            document.getElementById('cancel-edit-btn').style.display = 'inline';
+        }
+
+        function cancelEdit() {
+            editingLeaveId = null;
+            document.getElementById('leave-form').reset();
+            document.querySelector('#leave-form button[type="submit"]').textContent = 'Request Leave';
+            document.getElementById('cancel-edit-btn').style.display = 'none';
+        }
+
+        // INIT
+        document.getElementById('employee-form').addEventListener('submit', addEmployee);
+        document.getElementById('leave-form').addEventListener('submit', addLeave);
+        document.getElementById('cancel-edit-btn').addEventListener('click', cancelEdit);
+
+        loadEmployees();
+        loadLeaves();
+
+    </script>
+
+</body>
+</html>
